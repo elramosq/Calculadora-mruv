@@ -1,0 +1,139 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+def solicitar_flotante(mensaje):
+    """Solicita un valor numérico al usuario y valida la entrada."""
+    while True:
+        try:
+            return float(input(mensaje))
+        except ValueError:
+            print("❌ Error: Ingrese un valor numérico válido.")
+
+def generar_graficas(x0, v0, a, t_final):
+    """Genera las gráficas de x(t), v(t) y a(t) en una sola ventana."""
+    # Arreglo de tiempo
+    t = np.linspace(0, t_final, 300)
+    
+    # Ecuaciones horarias del MRUV
+    posicion = x0 + (v0 * t) + (0.5 * a * (t ** 2))
+    velocidad = v0 + (a * t)
+    aceleracion = np.full_like(t, a)
+    
+    # Creación de figura y subgráficas
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(7, 9))
+    fig.suptitle('Simulación MRUV - Análisis del Movimiento', fontsize=14, fontweight='bold')
+    
+    # 1. Gráfica Posición vs Tiempo
+    ax1.plot(t, posicion, color='blue', linewidth=2, label=r'$x(t) = x_0 + v_0 t + \frac{1}{2}a t^2$')
+    ax1.set_title('Posición vs Tiempo')
+    ax1.set_xlabel('Tiempo (s)')
+    ax1.set_ylabel('Posición (m)')
+    ax1.grid(True, linestyle='--', alpha=0.6)
+    ax1.legend(loc='upper left')
+    
+    # 2. Gráfica Velocidad vs Tiempo
+    ax2.plot(t, velocidad, color='red', linewidth=2, label=r'$v(t) = v_0 + a t$')
+    ax2.set_title('Velocidad vs Tiempo')
+    ax2.set_xlabel('Tiempo (s)')
+    ax2.set_ylabel('Velocidad (m/s)')
+    ax2.grid(True, linestyle='--', alpha=0.6)
+    ax2.legend(loc='upper left')
+    
+    # 3. Gráfica Aceleración vs Tiempo
+    ax3.plot(t, aceleracion, color='green', linewidth=2, label=r'$a(t) = a$')
+    ax3.set_title('Aceleración vs Tiempo')
+    ax3.set_xlabel('Tiempo (s)')
+    ax3.set_ylabel('Aceleración (m/s²)')
+    ax3.grid(True, linestyle='--', alpha=0.6)
+    ax3.legend(loc='upper left')
+    
+    plt.tight_layout()
+    plt.show()
+
+def calculadora_mruv():
+    print("=" * 50)
+    print("      CALCULADORA Y GRAFICADORA DE MRUV      ")
+    print("=" * 50)
+    print("Seleccione la opción según sus datos conocidos:")
+    print("1. Conozco: v0, a, t")
+    print("2. Conozco: v0, vf, t")
+    print("3. Conozco: v0, vf, a")
+    print("4. Conozco: v0, a, d (distancia)")
+    
+    opcion = input("\nIngrese una opción (1-4): ")
+    
+    print("\n--- INGRESO DE DATOS ---")
+    x0 = solicitar_flotante("Posición inicial x0 [m] (ingrese 0 si parte del origen): ")
+    
+    if opcion == "1":
+        v0 = solicitar_flotante("Velocidad inicial v0 [m/s]: ")
+        a = solicitar_flotante("Aceleración a [m/s²]: ")
+        t = solicitar_flotante("Tiempo t [s]: ")
+        
+        vf = v0 + a * t
+        d = v0 * t + 0.5 * a * (t ** 2)
+        
+    elif opcion == "2":
+        v0 = solicitar_flotante("Velocidad inicial v0 [m/s]: ")
+        vf = solicitar_flotante("Velocidad final vf [m/s]: ")
+        t = solicitar_flotante("Tiempo t [s]: ")
+        
+        a = (vf - v0) / t
+        d = ((v0 + vf) / 2) * t
+        
+    elif opcion == "3":
+        v0 = solicitar_flotante("Velocidad inicial v0 [m/s]: ")
+        vf = solicitar_flotante("Velocidad final vf [m/s]: ")
+        a = solicitar_flotante("Aceleración a [m/s²]: ")
+        
+        if a == 0:
+            print("❌ Error: Si la aceleración es 0, no es MRUV (es MRU).")
+            return
+        t = (vf - v0) / a
+        if t <= 0:
+            print("❌ Error: Tiempo negativo o nulo. Revise los signos de las velocidades y la aceleración.")
+            return
+        d = (vf**2 - v0**2) / (2 * a)
+        
+    elif opcion == "4":
+        v0 = solicitar_flotante("Velocidad inicial v0 [m/s]: ")
+        a = solicitar_flotante("Aceleración a [m/s²]: ")
+        d = solicitar_flotante("Distancia d [m]: ")
+        
+        discriminante = v0**2 + 2 * a * d
+        if discriminante < 0:
+            print("❌ Error: Caso físicamente imposible (raíz negativa para la velocidad final).")
+            return
+        
+        vf = np.sqrt(discriminante)
+        if a != 0:
+            t = (vf - v0) / a
+        else:
+            t = d / v0 if v0 != 0 else 0
+            
+    else:
+        print("❌ Opción no válida.")
+        return
+
+    # Posición final
+    xf = x0 + d
+
+    # Mostrar Resultados Físicos
+    print("\n" + "=" * 50)
+    print("             RESULTADOS DEL CÁLCULO             ")
+    print("=" * 50)
+    print(f" • Posición inicial (x₀)  : {x0:.2f} m")
+    print(f" • Posición final (x_f)   : {xf:.2f} m")
+    print(f" • Distancia recorrida (d): {d:.2f} m")
+    print(f" • Velocidad inicial (v₀) : {v0:.2f} m/s")
+    print(f" • Velocidad final (v_f)  : {vf:.2f} m/s")
+    print(f" • Aceleración (a)        : {a:.2f} m/s²")
+    print(f" • Tiempo (t)             : {t:.2f} s")
+    print("=" * 50)
+    print("Generando gráficas de movimiento...")
+    
+    # Generar visualizaciones
+    generar_graficas(x0, v0, a, t)
+
+if __name__ == "__main__":
+    calculadora_mruv()
