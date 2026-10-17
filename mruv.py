@@ -1,204 +1,688 @@
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import ttk, messagebox
+import math
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
 
-def calcular_mruv():
-    """
-    Función principal que lee los datos, calcula los faltantes
-    y genera las gráficas.
-    """
-    try:
-        # 1. Leer los datos de la interfaz
-        # Reemplazamos campos vacíos por None
-        v0_str = entry_v0.get()
-        vf_str = entry_vf.get()
-        a_str = entry_a.get()
-        t_str = entry_t.get()
-        d_str = entry_d.get()
+==========================================================
 
-        v0 = float(v0_str) if v0_str else None
-        vf = float(vf_str) if vf_str else None
-        a = float(a_str) if a_str else None
-        t = float(t_str) if t_str else None
-        d = float(d_str) if d_str else None
+CONFIGURACIÓN
 
-        # 2. Lógica de cálculo (Necesitamos al menos 3 datos)
-        datos_conocidos = sum(x is not None for x in [v0, vf, a, t, d])
-        
-        if datos_conocidos < 3:
-            messagebox.showwarning("Faltan datos", "Por favor, ingrese al menos 3 valores.")
-            return
+==========================================================
 
-        # Bucle de resolución (resuelve hasta que todos tengan valor)
-        for _ in range(3):
-            if d is None:
-                if v0 is not None and t is not None and a is not None:
-                    d = v0 * t + 0.5 * a * (t ** 2)
-                elif v0 is not None and vf is not None and t is not None:
-                    d = ((v0 + vf) / 2) * t
-                elif v0 is not None and vf is not None and a is not None and a != 0:
-                    d = (vf ** 2 - v0 ** 2) / (2 * a)
+TOL = 1e-7
 
-            if vf is None:
-                if v0 is not None and a is not None and t is not None:
-                    vf = v0 + a * t
-                elif v0 is not None and a is not None and d is not None:
-                    vf = (v0 ** 2 + 2 * a * d) ** 0.5 # Asume movimiento positivo
+VARIABLES = {
+"v0": ("Velocidad inicial", "m/s"),
+"vf": ("Velocidad final", "m/s"),
+"a": ("Aceleración", "m/s²"),
+"t": ("Tiempo", "s"),
+"d": ("Desplazamiento", "m"),
+}
 
-            if a is None:
-                if v0 is not None and vf is not None and t is not None and t != 0:
-                    a = (vf - v0) / t
-                elif v0 is not None and vf is not None and d is not None and d != 0:
-                    a = (vf ** 2 - v0 ** 2) / (2 * d)
-                elif v0 is not None and d is not None and t is not None and t != 0:
-                    a = (2 * (d - v0 * t)) / (t ** 2)
+COLORES = {
+"fondo": "#F3F6FC",
+"azul": "#173B6C",
+"azul_claro": "#2F75B5",
+"blanco": "#FFFFFF",
+"texto": "#243247",
+"verde": "#21865B",
+"borde": "#D6DFEC",
+}
 
-            if t is None:
-                if v0 is not None and vf is not None and a is not None and a != 0:
-                    t = (vf - v0) / a
-                elif v0 is not None and vf is not None and d is not None and (v0 + vf) != 0:
-                    t = (2 * d) / (v0 + vf)
+==========================================================
 
-            if v0 is None:
-                if vf is not None and a is not None and t is not None:
-                    v0 = vf - a * t
-                elif d is not None and a is not None and t is not None and t != 0:
-                    v0 = (d - 0.5 * a * (t ** 2)) / t
+FUNCIONES MATEMÁTICAS
 
-        # Validar si el tiempo es negativo (Físicamente imposible en este contexto)
-        if t is not None and t < 0:
-            messagebox.showerror("Error", "El tiempo no puede ser negativo.")
-            return
+==========================================================
 
-        # Mostrar resultados en la interfaz
-        lbl_resultado.config(
-            text=f"Resultados:\n"
-                 f"Velocidad Inicial (v0) = {v0:.2f} m/s\n"
-                 f"Velocidad Final (vf) = {vf:.2f} m/s\n"
-                 f"Aceleración (a) = {a:.2f} m/s²\n"
-                 f"Tiempo (t) = {t:.2f} s\n"
-                 f"Distancia (d) = {d:.2f} m",
-            fg="blue"
-        )
+def casi_iguales(x, y):
+return math.isclose(x, y, rel_tol=TOL, abs_tol=TOL)
 
-        # 3. Graficar usando Matplotlib
-        graficar_mruv(v0, a, t)
+def leer_numero(texto):
+texto = texto.strip()
 
-    except ValueError:
-        messagebox.showerror("Error de entrada", "Por favor, ingrese solo valores numéricos válidos.")
+if not texto:
+return None
 
-def graficar_mruv(v0, a, t_final):
-    """
-    Genera las tres gráficas de cinemática: x-t, v-t, a-t
-    """
-    # Limpiar el frame de gráficas
-    for widget in frame_graficas.winfo_children():
-        widget.destroy()
+valor = float(texto.replace(",", "."))
 
-    # Generar arreglo de tiempos desde 0 hasta t_final
-    tiempos = np.linspace(0, t_final, 100)
-    
-    # Ecuaciones del MRUV para las gráficas
-    posiciones = v0 * tiempos + 0.5 * a * (tiempos ** 2)
-    velocidades = v0 + a * tiempos
-    aceleraciones = np.full_like(tiempos, a)
+if not math.isfinite(valor):
+raise ValueError("Todos los valores deben ser finitos.")
 
-    # Crear figura con 3 subgráficos (1 fila, 3 columnas)
-    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(12, 4))
-    fig.tight_layout(pad=3.0)
+return valor
 
-    # Gráfica 1: Posición vs Tiempo
-    ax1.plot(tiempos, posiciones, color='green')
-    ax1.set_title('Posición vs Tiempo')
-    ax1.set_xlabel('Tiempo (s)')
-    ax1.set_ylabel('Posición (m)')
-    ax1.grid(True)
+def validar_datos(datos):
+errores = []
 
-    # Gráfica 2: Velocidad vs Tiempo
-    ax2.plot(tiempos, velocidades, color='blue')
-    ax2.set_title('Velocidad vs Tiempo')
-    ax2.set_xlabel('Tiempo (s)')
-    ax2.set_ylabel('Velocidad (m/s)')
-    ax2.grid(True)
+if datos["t"] is not None and datos["t"] < 0:
+errores.append("El tiempo no puede ser negativo.")
 
-    # Gráfica 3: Aceleración vs Tiempo
-    ax3.plot(tiempos, aceleraciones, color='red')
-    ax3.set_title('Aceleración vs Tiempo')
-    ax3.set_xlabel('Tiempo (s)')
-    ax3.set_ylabel('Aceleración (m/s²)')
-    ax3.grid(True)
+v0 = datos["v0"]
+vf = datos["vf"]
+a = datos["a"]
+t = datos["t"]
+d = datos["d"]
 
-    # Integrar la gráfica en la interfaz de Tkinter
-    canvas = FigureCanvasTkAgg(fig, master=frame_graficas)
-    canvas.draw()
-    canvas.get_tk_widget().pack()
+Velocidad final
 
-def limpiar_campos():
-    entry_v0.delete(0, tk.END)
-    entry_vf.delete(0, tk.END)
-    entry_a.delete(0, tk.END)
-    entry_t.delete(0, tk.END)
-    entry_d.delete(0, tk.END)
-    lbl_resultado.config(text="Ingrese al menos 3 datos y presione Calcular")
-    for widget in frame_graficas.winfo_children():
-        widget.destroy()
+if all(x is not None for x in (v0, vf, a, t)):
+esperado = v0 + a * t
 
-# ==========================================
-# INTERFAZ GRÁFICA (GUI) CON TKINTER
-# ==========================================
-root = tk.Tk()
-root.title("Simulador y Graficador Interactivo MRUV - Proyecto Física")
-root.geometry("900x700")
-root.configure(padx=20, pady=20)
+if not casi_iguales(vf, esperado):    
+    errores.append(    
+        f"La velocidad final debería ser "    
+        f"{esperado:.4f} m/s, no {vf:.4f} m/s."    
+    )
 
-# Título
-tk.Label(root, text="Calculadora y Graficador MRUV", font=("Arial", 18, "bold")).pack(pady=10)
-tk.Label(root, text="Deje en blanco los campos que desea calcular (mínimo 3 datos).").pack()
+Desplazamiento
 
-# Frame para los inputs
-frame_inputs = tk.Frame(root)
-frame_inputs.pack(pady=10)
+if all(x is not None for x in (v0, a, t, d)):
+esperado = v0 * t + 0.5 * a * t**2
 
-# Etiquetas y campos de texto
-tk.Label(frame_inputs, text="Velocidad Inicial (v0) [m/s]:").grid(row=0, column=0, padx=5, pady=5, sticky="e")
-entry_v0 = tk.Entry(frame_inputs, width=15)
-entry_v0.grid(row=0, column=1)
+if not casi_iguales(d, esperado):    
+    errores.append(    
+        f"El desplazamiento debería ser "    
+        f"{esperado:.4f} m, no {d:.4f} m."    
+    )
 
-tk.Label(frame_inputs, text="Velocidad Final (vf) [m/s]:").grid(row=1, column=0, padx=5, pady=5, sticky="e")
-entry_vf = tk.Entry(frame_inputs, width=15)
-entry_vf.grid(row=1, column=1)
+Ecuación sin tiempo
 
-tk.Label(frame_inputs, text="Aceleración (a) [m/s²]:").grid(row=2, column=0, padx=5, pady=5, sticky="e")
-entry_a = tk.Entry(frame_inputs, width=15)
-entry_a.grid(row=2, column=1)
+if all(x is not None for x in (v0, vf, a, d)):
+esperado = v0**2 + 2 * a * d
 
-tk.Label(frame_inputs, text="Tiempo (t) [s]:").grid(row=3, column=0, padx=5, pady=5, sticky="e")
-entry_t = tk.Entry(frame_inputs, width=15)
-entry_t.grid(row=3, column=1)
+if esperado < -TOL:    
+    errores.append(    
+        "Los datos implican una velocidad final "    
+        "al cuadrado negativa."    
+    )    
+elif not casi_iguales(vf**2, max(0.0, esperado)):    
+    errores.append(    
+        "Los datos no cumplen vf² = v0² + 2ad."    
+    )
 
-tk.Label(frame_inputs, text="Distancia (d) [m]:").grid(row=4, column=0, padx=5, pady=5, sticky="e")
-entry_d = tk.Entry(frame_inputs, width=15)
-entry_d.grid(row=4, column=1)
+Velocidad media
 
-# Botones
-frame_botones = tk.Frame(root)
-frame_botones.pack(pady=10)
+if all(x is not None for x in (v0, vf, t, d)):
+esperado = (v0 + vf) * t / 2
 
-btn_calcular = tk.Button(frame_botones, text="Calcular y Graficar", font=("Arial", 12, "bold"), bg="#4CAF50", fg="white", command=calcular_mruv)
-btn_calcular.pack(side=tk.LEFT, padx=10)
+if not casi_iguales(d, esperado):    
+    errores.append(    
+        "Los datos no cumplen d = ((v0 + vf)/2)t."    
+    )
 
-btn_limpiar = tk.Button(frame_botones, text="Limpiar Todo", font=("Arial", 12), bg="#f44336", fg="white", command=limpiar_campos)
-btn_limpiar.pack(side=tk.LEFT, padx=10)
+return list(dict.fromkeys(errores))
 
-# Etiqueta de resultados
-lbl_resultado = tk.Label(root, text="Ingrese al menos 3 datos y presione Calcular", font=("Arial", 12), justify="left")
-lbl_resultado.pack(pady=10)
+def resolver_mruv(datos):
+"""
+Busca soluciones mediante las ecuaciones del MRUV.
+Conserva los datos introducidos por el usuario.
+"""
 
-# Frame para las gráficas
-frame_graficas = tk.Frame(root)
-frame_graficas.pack(fill=tk.BOTH, expand=True)
+r = datos.copy()
+avisos = []
+tiempos_posibles = []
 
-# Iniciar la aplicación
-root.mainloop()
+errores = validar_datos(datos)
+
+if errores:
+return r, errores, tiempos_posibles
+
+for _ in range(15):
+anterior = r.copy()
+
+v0 = r["v0"]    
+vf = r["vf"]    
+a = r["a"]    
+t = r["t"]    
+d = r["d"]    
+
+# vf = v0 + at    
+if v0 is not None and a is not None and t is not None:    
+    if vf is None:    
+        r["vf"] = v0 + a * t    
+
+# d = v0t + at²/2    
+if v0 is not None and a is not None and t is not None:    
+    if d is None:    
+        r["d"] = v0 * t + 0.5 * a * t**2    
+
+# v0 = vf - at    
+if vf is not None and a is not None and t is not None:    
+    if v0 is None:    
+        r["v0"] = vf - a * t    
+
+# a = (vf - v0)/t    
+if v0 is not None and vf is not None and t is not None:    
+    if a is None and not casi_iguales(t, 0):    
+        r["a"] = (vf - v0) / t    
+
+# a = 2(d - v0t)/t²    
+if v0 is not None and d is not None and t is not None:    
+    if a is None and not casi_iguales(t, 0):    
+        r["a"] = 2 * (d - v0 * t) / t**2    
+
+# v0 = (d - at²/2)/t    
+if a is not None and d is not None and t is not None:    
+    if v0 is None and not casi_iguales(t, 0):    
+        r["v0"] = (d - 0.5 * a * t**2) / t    
+
+# a = (vf² - v0²)/(2d)    
+if v0 is not None and vf is not None and d is not None:    
+    if a is None and not casi_iguales(d, 0):    
+        r["a"] = (vf**2 - v0**2) / (2 * d)    
+
+# t = (vf - v0)/a    
+if v0 is not None and vf is not None and a is not None:    
+    if t is None and not casi_iguales(a, 0):    
+        candidato = (vf - v0) / a    
+
+        if candidato >= -TOL:    
+            r["t"] = max(0.0, candidato)    
+
+# d = velocidad media * tiempo    
+if v0 is not None and vf is not None and t is not None:    
+    if d is None:    
+        r["d"] = (v0 + vf) * t / 2    
+
+# Tiempo mediante velocidad media    
+if v0 is not None and vf is not None and d is not None:    
+    if t is None:    
+        vm = (v0 + vf) / 2    
+
+        if not casi_iguales(vm, 0):    
+            candidato = d / vm    
+
+            if candidato >= -TOL:    
+                r["t"] = max(0.0, candidato)    
+
+# Resolver la ecuación cuadrática del desplazamiento    
+if v0 is not None and a is not None and d is not None:    
+    if t is None:    
+
+        if not casi_iguales(a, 0):    
+            discriminante = v0**2 + 2 * a * d    
+
+            if discriminante < -TOL:    
+                avisos.append(    
+                    "No existe un tiempo real para "    
+                    "los valores de v0, a y d."    
+                )    
+            else:    
+                raiz = math.sqrt(max(0.0, discriminante))    
+
+                raices = [    
+                    (-v0 + raiz) / a,    
+                    (-v0 - raiz) / a    
+                ]    
+
+                tiempos_posibles = sorted({    
+                    round(x, 10)    
+                    for x in raices    
+                    if x >= -TOL    
+                })    
+
+                tiempos_posibles = [    
+                    max(0.0, x)    
+                    for x in tiempos_posibles    
+                ]    
+
+                if len(tiempos_posibles) == 1:    
+                    r["t"] = tiempos_posibles[0]    
+
+                elif len(tiempos_posibles) == 2:    
+                    avisos.append(    
+                        "Existen dos tiempos posibles: "    
+                        + " s y ".join(    
+                            f"{x:.4f}"    
+                            for x in tiempos_posibles    
+                        )    
+                        + " s. No se seleccionó uno."    
+                    )    
+
+        elif not casi_iguales(v0, 0):    
+            candidato = d / v0    
+
+            if candidato >= -TOL:    
+                r["t"] = max(0.0, candidato)    
+
+        elif casi_iguales(d, 0):    
+            avisos.append(    
+                "Con v0 = 0, a = 0 y d = 0, "    
+                "el tiempo no tiene una solución única."    
+            )    
+
+if r == anterior:    
+    break
+
+errores_finales = validar_datos(r)
+
+if errores_finales:
+avisos.extend(errores_finales)
+
+pendientes = [
+VARIABLES[k][0]
+for k in VARIABLES
+if r[k] is None
+]
+
+if pendientes:
+avisos.append(
+"Variables no determinadas: "
++ ", ".join(pendientes)
++ ". Se necesitan más datos o una condición adicional."
+)
+
+return r, list(dict.fromkeys(avisos)), tiempos_posibles
+
+==========================================================
+
+INTERFAZ Y FUNCIONES DE CONTROL
+
+==========================================================
+
+def obtener_datos():
+datos = {}
+
+for clave, campo in campos.items():
+try:
+datos[clave] = leer_numero(campo.get())
+except ValueError:
+raise ValueError(
+f"El campo {VARIABLES[clave][0]} "
+"contiene un número inválido."
+)
+
+return datos
+
+def mostrar_resultados(resultados, originales):
+salida = []
+
+for clave, (nombre, unidad) in VARIABLES.items():
+valor = resultados[clave]
+
+if valor is None:    
+    estado = "No determinado"    
+elif originales[clave] is not None:    
+    estado = "Ingresado"    
+else:    
+    estado = "Calculado"    
+
+if valor is None:    
+    salida.append(f"{nombre}: {estado}")    
+else:    
+    salida.append(    
+        f"{nombre}: {valor:.4f} {unidad} ({estado})"    
+    )
+
+caja_resultados.config(state="normal")
+caja_resultados.delete("1.0", tk.END)
+caja_resultados.insert(tk.END, "\n".join(salida))
+caja_resultados.config(state="disabled")
+
+def calcular():
+try:
+datos = obtener_datos()
+except ValueError as error:
+messagebox.showerror("Error de entrada", str(error))
+return
+
+cantidad = sum(v is not None for v in datos.values())
+
+if cantidad < 3:
+messagebox.showwarning(
+"Datos insuficientes",
+"Introduce al menos tres variables conocidas."
+)
+return
+
+errores = validar_datos(datos)
+
+if errores:
+messagebox.showerror(
+"Datos incompatibles",
+"\n\n".join(errores)
+)
+return
+
+resultados, avisos, tiempos = resolver_mruv(datos)
+
+mostrar_resultados(resultados, datos)
+
+if avisos:
+messagebox.showwarning(
+"Información del cálculo",
+"\n\n".join(avisos)
+)
+
+if all(
+resultados[k] is not None
+for k in ("v0", "a", "t")
+):
+graficar(
+resultados["v0"],
+resultados["a"],
+resultados["t"]
+)
+else:
+limpiar_grafica()
+
+==========================================================
+
+GRÁFICAS
+
+==========================================================
+
+def graficar(v0, a, t_final):
+limpiar_grafica()
+
+if t_final < 0:
+return
+
+tiempos = (
+np.linspace(0, t_final, 200)
+if t_final > 0
+else np.array([0.0])
+)
+
+posicion = v0 * tiempos + 0.5 * a * tiempos**2
+velocidad = v0 + a * tiempos
+aceleracion = np.full_like(tiempos, a)
+
+figura = Figure(figsize=(8, 7), dpi=100)
+figura.patch.set_facecolor(COLORES["blanco"])
+
+e1 = figura.add_subplot(311)
+e2 = figura.add_subplot(312)
+e3 = figura.add_subplot(313)
+
+e1.plot(tiempos, posicion, linewidth=2, label="Posición")
+e1.set_title("Posición frente al tiempo")
+e1.set_ylabel("Posición (m)")
+e1.grid(True, alpha=0.3)
+e1.legend()
+
+e2.plot(tiempos, velocidad, linewidth=2, label="Velocidad")
+e2.set_title("Velocidad frente al tiempo")
+e2.set_ylabel("Velocidad (m/s)")
+e2.grid(True, alpha=0.3)
+e2.legend()
+
+e3.plot(tiempos, aceleracion, linewidth=2, label="Aceleración")
+e3.set_title("Aceleración frente al tiempo")
+e3.set_xlabel("Tiempo (s)")
+e3.set_ylabel("Aceleración (m/s²)")
+e3.grid(True, alpha=0.3)
+e3.legend()
+
+for eje in (e1, e2, e3):
+eje.set_xlim(left=0)
+eje.set_facecolor("#FAFCFF")
+
+figura.tight_layout()
+
+global lienzo_actual
+lienzo_actual = FigureCanvasTkAgg(
+figura,
+master=marco_grafica
+)
+lienzo_actual.draw()
+lienzo_actual.get_tk_widget().pack(
+fill="both",
+expand=True
+)
+
+def limpiar_grafica():
+global lienzo_actual
+
+if lienzo_actual is not None:
+lienzo_actual.get_tk_widget().destroy()
+lienzo_actual = None
+
+def limpiar():
+for campo in campos.values():
+campo.delete(0, tk.END)
+
+caja_resultados.config(state="normal")
+caja_resultados.delete("1.0", tk.END)
+caja_resultados.insert(
+tk.END,
+"Introduce los datos y pulsa Calcular."
+)
+caja_resultados.config(state="disabled")
+
+limpiar_grafica()
+
+def cargar_ejemplo():
+limpiar()
+
+campos["v0"].insert(0, "4")
+campos["a"].insert(0, "2")
+campos["t"].insert(0, "5")
+
+calcular()
+
+==========================================================
+
+DISEÑO PROFESIONAL
+
+==========================================================
+
+ventana = tk.Tk()
+ventana.title("Simulador interactivo de MRUV")
+ventana.geometry("1150x850")
+ventana.minsize(900, 650)
+ventana.configure(bg=COLORES["fondo"])
+
+estilo = ttk.Style()
+estilo.theme_use("clam")
+
+estilo.configure(
+"TFrame",
+background=COLORES["fondo"]
+)
+
+estilo.configure(
+"TLabel",
+background=COLORES["fondo"],
+foreground=COLORES["texto"],
+font=("Arial", 10)
+)
+
+estilo.configure(
+"Titulo.TLabel",
+font=("Arial", 19, "bold"),
+foreground=COLORES["azul"]
+)
+
+estilo.configure(
+"Subtitulo.TLabel",
+font=("Arial", 10),
+foreground="#61718A"
+)
+
+estilo.configure(
+"TLabelframe",
+background=COLORES["blanco"],
+bordercolor=COLORES["borde"]
+)
+
+estilo.configure(
+"TLabelframe.Label",
+background=COLORES["blanco"],
+foreground=COLORES["azul"],
+font=("Arial", 10, "bold")
+)
+
+estilo.configure(
+"TButton",
+font=("Arial", 10, "bold"),
+padding=8
+)
+
+estilo.configure(
+"Principal.TButton",
+background=COLORES["azul"],
+foreground=COLORES["blanco"]
+)
+
+estilo.map(
+"Principal.TButton",
+background=[("active", COLORES["azul_claro"])]
+)
+
+estilo.configure(
+"TEntry",
+padding=6
+)
+
+contenedor = ttk.Frame(ventana, padding=15)
+contenedor.pack(fill="both", expand=True)
+
+ttk.Label(
+contenedor,
+text="SIMULADOR Y GRAFICADOR DE MRUV",
+style="Titulo.TLabel"
+).pack(pady=(0, 4))
+
+ttk.Label(
+contenedor,
+text="Movimiento Rectilíneo Uniformemente Variado",
+style="Subtitulo.TLabel"
+).pack(pady=(0, 15))
+
+panel = ttk.Frame(contenedor)
+panel.pack(fill="x")
+
+marco_entrada = ttk.LabelFrame(
+panel,
+text="Datos del movimiento",
+padding=12
+)
+marco_entrada.pack(
+side="left",
+fill="y",
+padx=(0, 12)
+)
+
+campos = {}
+
+for fila, (clave, (nombre, unidad)) in enumerate(VARIABLES.items()):
+ttk.Label(
+marco_entrada,
+text=f"{nombre} ({unidad})"
+).grid(
+row=fila,
+column=0,
+sticky="w",
+padx=5,
+pady=7
+)
+
+campo = ttk.Entry(marco_entrada, width=18)
+campo.grid(
+row=fila,
+column=1,
+padx=5,
+pady=7
+)
+
+campos[clave] = campo
+
+ttk.Label(
+marco_entrada,
+text="Deja vacías las variables desconocidas."
+).grid(
+row=5,
+column=0,
+columnspan=2,
+sticky="w",
+padx=5,
+pady=8
+)
+
+ttk.Button(
+marco_entrada,
+text="Calcular y graficar",
+style="Principal.TButton",
+command=calcular
+).grid(
+row=6,
+column=0,
+columnspan=2,
+sticky="ew",
+padx=5,
+pady=5
+)
+
+ttk.Button(
+marco_entrada,
+text="Cargar ejemplo",
+command=cargar_ejemplo
+).grid(
+row=7,
+column=0,
+columnspan=2,
+sticky="ew",
+padx=5,
+pady=5
+)
+
+ttk.Button(
+marco_entrada,
+text="Limpiar todo",
+command=limpiar
+).grid(
+row=8,
+column=0,
+columnspan=2,
+sticky="ew",
+padx=5,
+pady=5
+)
+
+marco_resultados = ttk.LabelFrame(
+panel,
+text="Resultados del cálculo",
+padding=12
+)
+marco_resultados.pack(
+side="left",
+fill="both",
+expand=True
+)
+
+caja_resultados = tk.Text(
+marco_resultados,
+height=13,
+wrap="word",
+font=("Consolas", 10),
+bg=COLORES["blanco"],
+fg=COLORES["texto"],
+relief="flat",
+padx=10,
+pady=10
+)
+caja_resultados.pack(fill="both", expand=True)
+caja_resultados.insert(
+tk.END,
+"Introduce los datos y pulsa Calcular."
+)
+caja_resultados.config(state="disabled")
+
+marco_grafica = ttk.LabelFrame(
+contenedor,
+text="Visualización gráfica del movimiento",
+padding=8
+)
+marco_grafica.pack(
+fill="both",
+expand=True,
+pady=(15, 0)
+)
+
+lienzo_actual = None
+
+ventana.mainloop()
