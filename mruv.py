@@ -2,473 +2,489 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import math
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
-==========================================================
 
-CONFIGURACIÓN
-
-==========================================================
+# ==========================================================
+# CONFIGURACIÓN
+# ==========================================================
 
 TOL = 1e-7
 
 VARIABLES = {
-"v0": ("Velocidad inicial", "m/s"),
-"vf": ("Velocidad final", "m/s"),
-"a": ("Aceleración", "m/s²"),
-"t": ("Tiempo", "s"),
-"d": ("Desplazamiento", "m"),
+    "v0": ("Velocidad inicial", "m/s"),
+    "vf": ("Velocidad final", "m/s"),
+    "a": ("Aceleración", "m/s²"),
+    "t": ("Tiempo", "s"),
+    "d": ("Desplazamiento", "m"),
 }
 
 COLORES = {
-"fondo": "#F3F6FC",
-"azul": "#173B6C",
-"azul_claro": "#2F75B5",
-"blanco": "#FFFFFF",
-"texto": "#243247",
-"verde": "#21865B",
-"borde": "#D6DFEC",
+    "fondo": "#F3F6FC",
+    "azul": "#173B6C",
+    "azul_claro": "#2F75B5",
+    "blanco": "#FFFFFF",
+    "texto": "#243247",
+    "verde": "#21865B",
+    "rojo": "#B42318",
+    "borde": "#D6DFEC",
 }
 
-==========================================================
 
-FUNCIONES MATEMÁTICAS
-
-==========================================================
+# ==========================================================
+# FUNCIONES MATEMÁTICAS
+# ==========================================================
 
 def casi_iguales(x, y):
-return math.isclose(x, y, rel_tol=TOL, abs_tol=TOL)
+    return math.isclose(
+        x, y,
+        rel_tol=TOL,
+        abs_tol=TOL
+    )
+
 
 def leer_numero(texto):
-texto = texto.strip()
+    texto = texto.strip()
 
-if not texto:
-return None
+    if not texto:
+        return None
 
-valor = float(texto.replace(",", "."))
+    valor = float(texto.replace(",", "."))
 
-if not math.isfinite(valor):
-raise ValueError("Todos los valores deben ser finitos.")
+    if not math.isfinite(valor):
+        raise ValueError("Los valores deben ser números finitos.")
 
-return valor
+    return valor
+
 
 def validar_datos(datos):
-errores = []
+    errores = []
 
-if datos["t"] is not None and datos["t"] < 0:
-errores.append("El tiempo no puede ser negativo.")
+    v0 = datos["v0"]
+    vf = datos["vf"]
+    a = datos["a"]
+    t = datos["t"]
+    d = datos["d"]
 
-v0 = datos["v0"]
-vf = datos["vf"]
-a = datos["a"]
-t = datos["t"]
-d = datos["d"]
+    if t is not None and t < 0:
+        errores.append("El tiempo no puede ser negativo.")
 
-Velocidad final
+    # Ecuación: vf = v0 + at
+    if all(x is not None for x in (v0, vf, a, t)):
+        esperado = v0 + a * t
 
-if all(x is not None for x in (v0, vf, a, t)):
-esperado = v0 + a * t
+        if not casi_iguales(vf, esperado):
+            errores.append(
+                f"La velocidad final debería ser "
+                f"{esperado:.4f} m/s."
+            )
 
-if not casi_iguales(vf, esperado):    
-    errores.append(    
-        f"La velocidad final debería ser "    
-        f"{esperado:.4f} m/s, no {vf:.4f} m/s."    
-    )
+    # Ecuación: d = v0t + at²/2
+    if all(x is not None for x in (v0, a, t, d)):
+        esperado = v0 * t + 0.5 * a * t**2
 
-Desplazamiento
+        if not casi_iguales(d, esperado):
+            errores.append(
+                f"El desplazamiento debería ser "
+                f"{esperado:.4f} m."
+            )
 
-if all(x is not None for x in (v0, a, t, d)):
-esperado = v0 * t + 0.5 * a * t**2
+    # Ecuación: vf² = v0² + 2ad
+    if all(x is not None for x in (v0, vf, a, d)):
+        esperado = v0**2 + 2 * a * d
 
-if not casi_iguales(d, esperado):    
-    errores.append(    
-        f"El desplazamiento debería ser "    
-        f"{esperado:.4f} m, no {d:.4f} m."    
-    )
+        if esperado < -TOL:
+            errores.append(
+                "Los datos implican una velocidad final "
+                "al cuadrado negativa."
+            )
+        elif not casi_iguales(vf**2, max(0.0, esperado)):
+            errores.append(
+                "Los datos no cumplen vf² = v0² + 2ad."
+            )
 
-Ecuación sin tiempo
+    # Ecuación: d = ((v0 + vf)/2)t
+    if all(x is not None for x in (v0, vf, t, d)):
+        esperado = (v0 + vf) * t / 2
 
-if all(x is not None for x in (v0, vf, a, d)):
-esperado = v0**2 + 2 * a * d
+        if not casi_iguales(d, esperado):
+            errores.append(
+                "Los datos no cumplen "
+                "d = ((v0 + vf)/2)t."
+            )
 
-if esperado < -TOL:    
-    errores.append(    
-        "Los datos implican una velocidad final "    
-        "al cuadrado negativa."    
-    )    
-elif not casi_iguales(vf**2, max(0.0, esperado)):    
-    errores.append(    
-        "Los datos no cumplen vf² = v0² + 2ad."    
-    )
+    return list(dict.fromkeys(errores))
 
-Velocidad media
-
-if all(x is not None for x in (v0, vf, t, d)):
-esperado = (v0 + vf) * t / 2
-
-if not casi_iguales(d, esperado):    
-    errores.append(    
-        "Los datos no cumplen d = ((v0 + vf)/2)t."    
-    )
-
-return list(dict.fromkeys(errores))
 
 def resolver_mruv(datos):
-"""
-Busca soluciones mediante las ecuaciones del MRUV.
-Conserva los datos introducidos por el usuario.
-"""
+    """
+    Calcula variables desconocidas mediante las ecuaciones
+    del MRUV. Si existen dos tiempos posibles, los informa.
+    """
 
-r = datos.copy()
-avisos = []
-tiempos_posibles = []
+    r = datos.copy()
+    avisos = []
+    tiempos_posibles = []
 
-errores = validar_datos(datos)
+    errores = validar_datos(datos)
 
-if errores:
-return r, errores, tiempos_posibles
+    if errores:
+        return r, errores, tiempos_posibles
 
-for _ in range(15):
-anterior = r.copy()
+    v0 = r["v0"]
+    vf = r["vf"]
+    a = r["a"]
+    t = r["t"]
+    d = r["d"]
 
-v0 = r["v0"]    
-vf = r["vf"]    
-a = r["a"]    
-t = r["t"]    
-d = r["d"]    
+    # Resolver tiempo mediante la ecuación cuadrática:
+    # d = v0*t + (a*t²)/2
+    if t is None and all(x is not None for x in (v0, a, d)):
 
-# vf = v0 + at    
-if v0 is not None and a is not None and t is not None:    
-    if vf is None:    
-        r["vf"] = v0 + a * t    
+        if casi_iguales(a, 0):
+            if not casi_iguales(v0, 0):
+                candidato = d / v0
 
-# d = v0t + at²/2    
-if v0 is not None and a is not None and t is not None:    
-    if d is None:    
-        r["d"] = v0 * t + 0.5 * a * t**2    
+                if candidato >= -TOL:
+                    tiempos_posibles = [max(0.0, candidato)]
 
-# v0 = vf - at    
-if vf is not None and a is not None and t is not None:    
-    if v0 is None:    
-        r["v0"] = vf - a * t    
+            elif casi_iguales(d, 0):
+                avisos.append(
+                    "El tiempo no puede determinarse de forma única "
+                    "con v0 = 0, a = 0 y d = 0."
+                )
 
-# a = (vf - v0)/t    
-if v0 is not None and vf is not None and t is not None:    
-    if a is None and not casi_iguales(t, 0):    
-        r["a"] = (vf - v0) / t    
+        else:
+            discriminante = v0**2 + 2 * a * d
 
-# a = 2(d - v0t)/t²    
-if v0 is not None and d is not None and t is not None:    
-    if a is None and not casi_iguales(t, 0):    
-        r["a"] = 2 * (d - v0 * t) / t**2    
+            if discriminante < -TOL:
+                avisos.append(
+                    "No existen tiempos reales para los datos dados."
+                )
+            else:
+                raiz = math.sqrt(max(0.0, discriminante))
 
-# v0 = (d - at²/2)/t    
-if a is not None and d is not None and t is not None:    
-    if v0 is None and not casi_iguales(t, 0):    
-        r["v0"] = (d - 0.5 * a * t**2) / t    
+                raices = [
+                    (-v0 + raiz) / a,
+                    (-v0 - raiz) / a
+                ]
 
-# a = (vf² - v0²)/(2d)    
-if v0 is not None and vf is not None and d is not None:    
-    if a is None and not casi_iguales(d, 0):    
-        r["a"] = (vf**2 - v0**2) / (2 * d)    
+                tiempos_posibles = sorted({
+                    round(max(0.0, x), 10)
+                    for x in raices
+                    if x >= -TOL
+                })
 
-# t = (vf - v0)/a    
-if v0 is not None and vf is not None and a is not None:    
-    if t is None and not casi_iguales(a, 0):    
-        candidato = (vf - v0) / a    
+        if len(tiempos_posibles) == 1:
+            r["t"] = tiempos_posibles[0]
 
-        if candidato >= -TOL:    
-            r["t"] = max(0.0, candidato)    
+        elif len(tiempos_posibles) == 2:
+            avisos.append(
+                "Existen dos tiempos posibles: "
+                + " s y ".join(
+                    f"{x:.4f}" for x in tiempos_posibles
+                )
+                + " s. Introduce una condición adicional "
+                  "para elegir uno."
+            )
 
-# d = velocidad media * tiempo    
-if v0 is not None and vf is not None and t is not None:    
-    if d is None:    
-        r["d"] = (v0 + vf) * t / 2    
+    # Resolver las variables que se puedan determinar.
+    for _ in range(10):
+        anterior = r.copy()
 
-# Tiempo mediante velocidad media    
-if v0 is not None and vf is not None and d is not None:    
-    if t is None:    
-        vm = (v0 + vf) / 2    
+        v0 = r["v0"]
+        vf = r["vf"]
+        a = r["a"]
+        t = r["t"]
+        d = r["d"]
 
-        if not casi_iguales(vm, 0):    
-            candidato = d / vm    
+        # vf = v0 + at
+        if v0 is not None and a is not None and t is not None:
+            if vf is None:
+                r["vf"] = v0 + a * t
 
-            if candidato >= -TOL:    
-                r["t"] = max(0.0, candidato)    
+        # d = v0t + at²/2
+        if v0 is not None and a is not None and t is not None:
+            if d is None:
+                r["d"] = v0 * t + 0.5 * a * t**2
 
-# Resolver la ecuación cuadrática del desplazamiento    
-if v0 is not None and a is not None and d is not None:    
-    if t is None:    
+        # v0 = vf - at
+        if vf is not None and a is not None and t is not None:
+            if v0 is None:
+                r["v0"] = vf - a * t
 
-        if not casi_iguales(a, 0):    
-            discriminante = v0**2 + 2 * a * d    
+        # a = (vf - v0)/t
+        if v0 is not None and vf is not None and t is not None:
+            if a is None and not casi_iguales(t, 0):
+                r["a"] = (vf - v0) / t
 
-            if discriminante < -TOL:    
-                avisos.append(    
-                    "No existe un tiempo real para "    
-                    "los valores de v0, a y d."    
-                )    
-            else:    
-                raiz = math.sqrt(max(0.0, discriminante))    
+        # a = 2(d - v0t)/t²
+        if v0 is not None and d is not None and t is not None:
+            if a is None and not casi_iguales(t, 0):
+                r["a"] = 2 * (d - v0 * t) / t**2
 
-                raices = [    
-                    (-v0 + raiz) / a,    
-                    (-v0 - raiz) / a    
-                ]    
+        # v0 = (d - at²/2)/t
+        if a is not None and d is not None and t is not None:
+            if v0 is None and not casi_iguales(t, 0):
+                r["v0"] = (d - 0.5 * a * t**2) / t
 
-                tiempos_posibles = sorted({    
-                    round(x, 10)    
-                    for x in raices    
-                    if x >= -TOL    
-                })    
+        # a = (vf² - v0²)/(2d)
+        if v0 is not None and vf is not None and d is not None:
+            if a is None and not casi_iguales(d, 0):
+                r["a"] = (vf**2 - v0**2) / (2 * d)
 
-                tiempos_posibles = [    
-                    max(0.0, x)    
-                    for x in tiempos_posibles    
-                ]    
+        # t = (vf - v0)/a
+        if v0 is not None and vf is not None and a is not None:
+            if t is None and not casi_iguales(a, 0):
+                candidato = (vf - v0) / a
 
-                if len(tiempos_posibles) == 1:    
-                    r["t"] = tiempos_posibles[0]    
+                if candidato >= -TOL:
+                    r["t"] = max(0.0, candidato)
 
-                elif len(tiempos_posibles) == 2:    
-                    avisos.append(    
-                        "Existen dos tiempos posibles: "    
-                        + " s y ".join(    
-                            f"{x:.4f}"    
-                            for x in tiempos_posibles    
-                        )    
-                        + " s. No se seleccionó uno."    
-                    )    
+        # d = ((v0 + vf)/2)t
+        if v0 is not None and vf is not None and t is not None:
+            if d is None:
+                r["d"] = (v0 + vf) * t / 2
 
-        elif not casi_iguales(v0, 0):    
-            candidato = d / v0    
+        # t = 2d/(v0 + vf)
+        if v0 is not None and vf is not None and d is not None:
+            if t is None:
+                vm_doble = v0 + vf
 
-            if candidato >= -TOL:    
-                r["t"] = max(0.0, candidato)    
+                if not casi_iguales(vm_doble, 0):
+                    candidato = 2 * d / vm_doble
 
-        elif casi_iguales(d, 0):    
-            avisos.append(    
-                "Con v0 = 0, a = 0 y d = 0, "    
-                "el tiempo no tiene una solución única."    
-            )    
+                    if candidato >= -TOL:
+                        r["t"] = max(0.0, candidato)
 
-if r == anterior:    
-    break
+        if r == anterior:
+            break
 
-errores_finales = validar_datos(r)
+    # Comprobar consistencia de los resultados.
+    errores_finales = validar_datos(r)
 
-if errores_finales:
-avisos.extend(errores_finales)
+    if errores_finales:
+        avisos.extend(errores_finales)
 
-pendientes = [
-VARIABLES[k][0]
-for k in VARIABLES
-if r[k] is None
-]
+    pendientes = [
+        VARIABLES[k][0]
+        for k in VARIABLES
+        if r[k] is None
+    ]
 
-if pendientes:
-avisos.append(
-"Variables no determinadas: "
-+ ", ".join(pendientes)
-+ ". Se necesitan más datos o una condición adicional."
-)
+    if pendientes:
+        avisos.append(
+            "Variables no determinadas: "
+            + ", ".join(pendientes)
+            + ". Introduce más datos."
+        )
 
-return r, list(dict.fromkeys(avisos)), tiempos_posibles
+    return r, list(dict.fromkeys(avisos)), tiempos_posibles
 
-==========================================================
 
-INTERFAZ Y FUNCIONES DE CONTROL
-
-==========================================================
+# ==========================================================
+# INTERFAZ: OBTENER Y MOSTRAR DATOS
+# ==========================================================
 
 def obtener_datos():
-datos = {}
+    datos = {}
 
-for clave, campo in campos.items():
-try:
-datos[clave] = leer_numero(campo.get())
-except ValueError:
-raise ValueError(
-f"El campo {VARIABLES[clave][0]} "
-"contiene un número inválido."
-)
+    for clave, campo in campos.items():
+        try:
+            datos[clave] = leer_numero(campo.get())
+        except ValueError:
+            raise ValueError(
+                f"El campo '{VARIABLES[clave][0]}' "
+                "contiene un número inválido."
+            )
 
-return datos
+    return datos
+
 
 def mostrar_resultados(resultados, originales):
-salida = []
+    salida = []
 
-for clave, (nombre, unidad) in VARIABLES.items():
-valor = resultados[clave]
+    for clave, (nombre, unidad) in VARIABLES.items():
+        valor = resultados[clave]
 
-if valor is None:    
-    estado = "No determinado"    
-elif originales[clave] is not None:    
-    estado = "Ingresado"    
-else:    
-    estado = "Calculado"    
+        if valor is None:
+            estado = "No determinado"
+            salida.append(f"{nombre}: {estado}")
 
-if valor is None:    
-    salida.append(f"{nombre}: {estado}")    
-else:    
-    salida.append(    
-        f"{nombre}: {valor:.4f} {unidad} ({estado})"    
-    )
+        else:
+            if originales[clave] is not None:
+                estado = "Ingresado"
+            else:
+                estado = "Calculado"
 
-caja_resultados.config(state="normal")
-caja_resultados.delete("1.0", tk.END)
-caja_resultados.insert(tk.END, "\n".join(salida))
-caja_resultados.config(state="disabled")
+            salida.append(
+                f"{nombre}: {valor:.4f} {unidad} ({estado})"
+            )
+
+    caja_resultados.config(state="normal")
+    caja_resultados.delete("1.0", tk.END)
+    caja_resultados.insert(tk.END, "\n".join(salida))
+    caja_resultados.config(state="disabled")
+
 
 def calcular():
-try:
-datos = obtener_datos()
-except ValueError as error:
-messagebox.showerror("Error de entrada", str(error))
-return
+    try:
+        datos = obtener_datos()
+    except ValueError as error:
+        messagebox.showerror("Error de entrada", str(error))
+        return
 
-cantidad = sum(v is not None for v in datos.values())
+    cantidad = sum(v is not None for v in datos.values())
 
-if cantidad < 3:
-messagebox.showwarning(
-"Datos insuficientes",
-"Introduce al menos tres variables conocidas."
-)
-return
+    if cantidad < 3:
+        messagebox.showwarning(
+            "Datos insuficientes",
+            "Introduce al menos tres variables conocidas."
+        )
+        return
 
-errores = validar_datos(datos)
+    errores = validar_datos(datos)
 
-if errores:
-messagebox.showerror(
-"Datos incompatibles",
-"\n\n".join(errores)
-)
-return
+    if errores:
+        messagebox.showerror(
+            "Datos incompatibles",
+            "\n\n".join(errores)
+        )
+        return
 
-resultados, avisos, tiempos = resolver_mruv(datos)
+    resultados, avisos, tiempos = resolver_mruv(datos)
 
-mostrar_resultados(resultados, datos)
+    mostrar_resultados(resultados, datos)
 
-if avisos:
-messagebox.showwarning(
-"Información del cálculo",
-"\n\n".join(avisos)
-)
+    if avisos:
+        messagebox.showwarning(
+            "Información del cálculo",
+            "\n\n".join(avisos)
+        )
 
-if all(
-resultados[k] is not None
-for k in ("v0", "a", "t")
-):
-graficar(
-resultados["v0"],
-resultados["a"],
-resultados["t"]
-)
-else:
-limpiar_grafica()
+    if all(
+        resultados[k] is not None
+        for k in ("v0", "a", "t")
+    ):
+        graficar(
+            resultados["v0"],
+            resultados["a"],
+            resultados["t"]
+        )
+    else:
+        limpiar_grafica()
 
-==========================================================
 
-GRÁFICAS
-
-==========================================================
+# ==========================================================
+# GRÁFICAS
+# ==========================================================
 
 def graficar(v0, a, t_final):
-limpiar_grafica()
+    limpiar_grafica()
 
-if t_final < 0:
-return
+    if t_final < 0:
+        return
 
-tiempos = (
-np.linspace(0, t_final, 200)
-if t_final > 0
-else np.array([0.0])
-)
+    tiempos = (
+        np.linspace(0, t_final, 200)
+        if t_final > 0
+        else np.array([0.0])
+    )
 
-posicion = v0 * tiempos + 0.5 * a * tiempos**2
-velocidad = v0 + a * tiempos
-aceleracion = np.full_like(tiempos, a)
+    # Desplazamiento desde la posición inicial.
+    posicion = v0 * tiempos + 0.5 * a * tiempos**2
 
-figura = Figure(figsize=(8, 7), dpi=100)
-figura.patch.set_facecolor(COLORES["blanco"])
+    velocidad = v0 + a * tiempos
+    aceleracion = np.full_like(tiempos, a)
 
-e1 = figura.add_subplot(311)
-e2 = figura.add_subplot(312)
-e3 = figura.add_subplot(313)
+    figura = Figure(figsize=(8, 7), dpi=100)
+    figura.patch.set_facecolor(COLORES["blanco"])
 
-e1.plot(tiempos, posicion, linewidth=2, label="Posición")
-e1.set_title("Posición frente al tiempo")
-e1.set_ylabel("Posición (m)")
-e1.grid(True, alpha=0.3)
-e1.legend()
+    e1 = figura.add_subplot(311)
+    e2 = figura.add_subplot(312)
+    e3 = figura.add_subplot(313)
 
-e2.plot(tiempos, velocidad, linewidth=2, label="Velocidad")
-e2.set_title("Velocidad frente al tiempo")
-e2.set_ylabel("Velocidad (m/s)")
-e2.grid(True, alpha=0.3)
-e2.legend()
+    e1.plot(tiempos, posicion, linewidth=2, label="Desplazamiento")
+    e1.set_title("Desplazamiento frente al tiempo")
+    e1.set_ylabel("Desplazamiento (m)")
+    e1.grid(True, alpha=0.3)
+    e1.legend()
 
-e3.plot(tiempos, aceleracion, linewidth=2, label="Aceleración")
-e3.set_title("Aceleración frente al tiempo")
-e3.set_xlabel("Tiempo (s)")
-e3.set_ylabel("Aceleración (m/s²)")
-e3.grid(True, alpha=0.3)
-e3.legend()
+    e2.plot(tiempos, velocidad, linewidth=2, label="Velocidad")
+    e2.set_title("Velocidad frente al tiempo")
+    e2.set_ylabel("Velocidad (m/s)")
+    e2.grid(True, alpha=0.3)
+    e2.legend()
 
-for eje in (e1, e2, e3):
-eje.set_xlim(left=0)
-eje.set_facecolor("#FAFCFF")
+    e3.plot(tiempos, aceleracion, linewidth=2, label="Aceleración")
+    e3.set_title("Aceleración frente al tiempo")
+    e3.set_xlabel("Tiempo (s)")
+    e3.set_ylabel("Aceleración (m/s²)")
+    e3.grid(True, alpha=0.3)
+    e3.legend()
 
-figura.tight_layout()
+    for eje in (e1, e2, e3):
+        eje.set_xlim(left=0)
+        eje.set_facecolor("#FAFCFF")
 
-global lienzo_actual
-lienzo_actual = FigureCanvasTkAgg(
-figura,
-master=marco_grafica
-)
-lienzo_actual.draw()
-lienzo_actual.get_tk_widget().pack(
-fill="both",
-expand=True
-)
+    figura.tight_layout()
+
+    global lienzo_actual
+
+    lienzo_actual = FigureCanvasTkAgg(
+        figura,
+        master=marco_grafica
+    )
+
+    lienzo_actual.draw()
+
+    lienzo_actual.get_tk_widget().pack(
+        fill="both",
+        expand=True
+    )
+
 
 def limpiar_grafica():
-global lienzo_actual
+    global lienzo_actual
 
-if lienzo_actual is not None:
-lienzo_actual.get_tk_widget().destroy()
-lienzo_actual = None
+    if lienzo_actual is not None:
+        lienzo_actual.get_tk_widget().destroy()
+        lienzo_actual = None
+
+
+# ==========================================================
+# BOTONES
+# ==========================================================
 
 def limpiar():
-for campo in campos.values():
-campo.delete(0, tk.END)
+    for campo in campos.values():
+        campo.delete(0, tk.END)
 
-caja_resultados.config(state="normal")
-caja_resultados.delete("1.0", tk.END)
-caja_resultados.insert(
-tk.END,
-"Introduce los datos y pulsa Calcular."
-)
-caja_resultados.config(state="disabled")
+    caja_resultados.config(state="normal")
+    caja_resultados.delete("1.0", tk.END)
+    caja_resultados.insert(
+        tk.END,
+        "Introduce los datos y pulsa Calcular."
+    )
+    caja_resultados.config(state="disabled")
 
-limpiar_grafica()
+    limpiar_grafica()
+
 
 def cargar_ejemplo():
-limpiar()
+    limpiar()
 
-campos["v0"].insert(0, "4")
-campos["a"].insert(0, "2")
-campos["t"].insert(0, "5")
+    campos["v0"].insert(0, "4")
+    campos["a"].insert(0, "2")
+    campos["t"].insert(0, "5")
 
-calcular()
+    calcular()
 
-==========================================================
 
-DISEÑO PROFESIONAL
-
-==========================================================
+# ==========================================================
+# DISEÑO PROFESIONAL
+# ==========================================================
 
 ventana = tk.Tk()
 ventana.title("Simulador interactivo de MRUV")
@@ -480,207 +496,214 @@ estilo = ttk.Style()
 estilo.theme_use("clam")
 
 estilo.configure(
-"TFrame",
-background=COLORES["fondo"]
+    "TFrame",
+    background=COLORES["fondo"]
 )
 
 estilo.configure(
-"TLabel",
-background=COLORES["fondo"],
-foreground=COLORES["texto"],
-font=("Arial", 10)
+    "TLabel",
+    background=COLORES["fondo"],
+    foreground=COLORES["texto"],
+    font=("Arial", 10)
 )
 
 estilo.configure(
-"Titulo.TLabel",
-font=("Arial", 19, "bold"),
-foreground=COLORES["azul"]
+    "Titulo.TLabel",
+    font=("Arial", 19, "bold"),
+    foreground=COLORES["azul"]
 )
 
 estilo.configure(
-"Subtitulo.TLabel",
-font=("Arial", 10),
-foreground="#61718A"
+    "Subtitulo.TLabel",
+    font=("Arial", 10),
+    foreground="#61718A"
 )
 
 estilo.configure(
-"TLabelframe",
-background=COLORES["blanco"],
-bordercolor=COLORES["borde"]
+    "TLabelframe",
+    background=COLORES["blanco"],
+    bordercolor=COLORES["borde"]
 )
 
 estilo.configure(
-"TLabelframe.Label",
-background=COLORES["blanco"],
-foreground=COLORES["azul"],
-font=("Arial", 10, "bold")
+    "TLabelframe.Label",
+    background=COLORES["blanco"],
+    foreground=COLORES["azul"],
+    font=("Arial", 10, "bold")
 )
 
 estilo.configure(
-"TButton",
-font=("Arial", 10, "bold"),
-padding=8
+    "TButton",
+    font=("Arial", 10, "bold"),
+    padding=8
 )
 
 estilo.configure(
-"Principal.TButton",
-background=COLORES["azul"],
-foreground=COLORES["blanco"]
+    "Principal.TButton",
+    background=COLORES["azul"],
+    foreground=COLORES["blanco"]
 )
 
 estilo.map(
-"Principal.TButton",
-background=[("active", COLORES["azul_claro"])]
+    "Principal.TButton",
+    background=[("active", COLORES["azul_claro"])]
 )
 
 estilo.configure(
-"TEntry",
-padding=6
+    "TEntry",
+    padding=6
 )
 
 contenedor = ttk.Frame(ventana, padding=15)
 contenedor.pack(fill="both", expand=True)
 
 ttk.Label(
-contenedor,
-text="SIMULADOR Y GRAFICADOR DE MRUV",
-style="Titulo.TLabel"
+    contenedor,
+    text="SIMULADOR Y GRAFICADOR DE MRUV",
+    style="Titulo.TLabel"
 ).pack(pady=(0, 4))
 
 ttk.Label(
-contenedor,
-text="Movimiento Rectilíneo Uniformemente Variado",
-style="Subtitulo.TLabel"
+    contenedor,
+    text="Movimiento Rectilíneo Uniformemente Variado",
+    style="Subtitulo.TLabel"
 ).pack(pady=(0, 15))
 
 panel = ttk.Frame(contenedor)
 panel.pack(fill="x")
 
 marco_entrada = ttk.LabelFrame(
-panel,
-text="Datos del movimiento",
-padding=12
+    panel,
+    text="Datos del movimiento",
+    padding=12
 )
+
 marco_entrada.pack(
-side="left",
-fill="y",
-padx=(0, 12)
+    side="left",
+    fill="y",
+    padx=(0, 12)
 )
 
 campos = {}
 
 for fila, (clave, (nombre, unidad)) in enumerate(VARIABLES.items()):
+    ttk.Label(
+        marco_entrada,
+        text=f"{nombre} ({unidad})"
+    ).grid(
+        row=fila,
+        column=0,
+        sticky="w",
+        padx=5,
+        pady=7
+    )
+
+    campo = ttk.Entry(marco_entrada, width=18)
+
+    campo.grid(
+        row=fila,
+        column=1,
+        padx=5,
+        pady=7
+    )
+
+    campos[clave] = campo
+
 ttk.Label(
-marco_entrada,
-text=f"{nombre} ({unidad})"
+    marco_entrada,
+    text="Deja vacías las variables desconocidas."
 ).grid(
-row=fila,
-column=0,
-sticky="w",
-padx=5,
-pady=7
-)
-
-campo = ttk.Entry(marco_entrada, width=18)
-campo.grid(
-row=fila,
-column=1,
-padx=5,
-pady=7
-)
-
-campos[clave] = campo
-
-ttk.Label(
-marco_entrada,
-text="Deja vacías las variables desconocidas."
-).grid(
-row=5,
-column=0,
-columnspan=2,
-sticky="w",
-padx=5,
-pady=8
+    row=5,
+    column=0,
+    columnspan=2,
+    sticky="w",
+    padx=5,
+    pady=8
 )
 
 ttk.Button(
-marco_entrada,
-text="Calcular y graficar",
-style="Principal.TButton",
-command=calcular
+    marco_entrada,
+    text="Calcular y graficar",
+    style="Principal.TButton",
+    command=calcular
 ).grid(
-row=6,
-column=0,
-columnspan=2,
-sticky="ew",
-padx=5,
-pady=5
+    row=6,
+    column=0,
+    columnspan=2,
+    sticky="ew",
+    padx=5,
+    pady=5
 )
 
 ttk.Button(
-marco_entrada,
-text="Cargar ejemplo",
-command=cargar_ejemplo
+    marco_entrada,
+    text="Cargar ejemplo",
+    command=cargar_ejemplo
 ).grid(
-row=7,
-column=0,
-columnspan=2,
-sticky="ew",
-padx=5,
-pady=5
+    row=7,
+    column=0,
+    columnspan=2,
+    sticky="ew",
+    padx=5,
+    pady=5
 )
 
 ttk.Button(
-marco_entrada,
-text="Limpiar todo",
-command=limpiar
+    marco_entrada,
+    text="Limpiar todo",
+    command=limpiar
 ).grid(
-row=8,
-column=0,
-columnspan=2,
-sticky="ew",
-padx=5,
-pady=5
+    row=8,
+    column=0,
+    columnspan=2,
+    sticky="ew",
+    padx=5,
+    pady=5
 )
 
 marco_resultados = ttk.LabelFrame(
-panel,
-text="Resultados del cálculo",
-padding=12
+    panel,
+    text="Resultados del cálculo",
+    padding=12
 )
+
 marco_resultados.pack(
-side="left",
-fill="both",
-expand=True
+    side="left",
+    fill="both",
+    expand=True
 )
 
 caja_resultados = tk.Text(
-marco_resultados,
-height=13,
-wrap="word",
-font=("Consolas", 10),
-bg=COLORES["blanco"],
-fg=COLORES["texto"],
-relief="flat",
-padx=10,
-pady=10
+    marco_resultados,
+    height=13,
+    wrap="word",
+    font=("Consolas", 10),
+    bg=COLORES["blanco"],
+    fg=COLORES["texto"],
+    relief="flat",
+    padx=10,
+    pady=10
 )
+
 caja_resultados.pack(fill="both", expand=True)
+
 caja_resultados.insert(
-tk.END,
-"Introduce los datos y pulsa Calcular."
+    tk.END,
+    "Introduce los datos y pulsa Calcular."
 )
+
 caja_resultados.config(state="disabled")
 
 marco_grafica = ttk.LabelFrame(
-contenedor,
-text="Visualización gráfica del movimiento",
-padding=8
+    contenedor,
+    text="Visualización gráfica del movimiento",
+    padding=8
 )
+
 marco_grafica.pack(
-fill="both",
-expand=True,
-pady=(15, 0)
+    fill="both",
+    expand=True,
+    pady=(15, 0)
 )
 
 lienzo_actual = None
